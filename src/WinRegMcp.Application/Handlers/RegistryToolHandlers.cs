@@ -159,14 +159,72 @@ public sealed class RegistryToolHandlers
                 "registry_operations_total",
                 new Dictionary<string, string> { ["operation"] = "delete_value", ["status"] = "success" });
 
-            return $"Successfully deleted value '{valueName}' from {path}";
+            return $"✅ Successfully deleted '{valueName}' from autostart";
         }
-        catch (RegistryDomainException)
+        catch (RegistryValueNotFoundException)
         {
+            // Value already doesn't exist - that's fine
+            _logger.LogInformation(
+                "[{CorrelationId}] Value '{ValueName}' not found in {Path} - already deleted or doesn't exist",
+                context.CorrelationId, valueName, path);
+
+            _metrics.IncrementCounter(
+                "registry_operations_total",
+                new Dictionary<string, string> { ["operation"] = "delete_value", ["status"] = "success" });
+
+            return $"ℹ️  '{valueName}' was already removed or doesn't exist";
+        }
+        catch (RegistryKeyNotFoundException)
+        {
+            // Key doesn't exist - that's fine too
+            _logger.LogInformation(
+                "[{CorrelationId}] Registry key not found: {Path}",
+                context.CorrelationId, path);
+
+            _metrics.IncrementCounter(
+                "registry_operations_total",
+                new Dictionary<string, string> { ["operation"] = "delete_value", ["status"] = "success" });
+
+            return $"ℹ️  Registry key not found: {path}";
+        }
+        catch (RegistryAccessDeniedException ex)
+        {
+            _logger.LogError(
+                ex,
+                "[{CorrelationId}] Access denied when deleting '{ValueName}' from {Path}",
+                context.CorrelationId, valueName, path);
+
             _metrics.IncrementCounter(
                 "registry_operations_total",
                 new Dictionary<string, string> { ["operation"] = "delete_value", ["status"] = "error" });
-            throw;
+
+            return $"❌ Access denied: {ex.Reason}";
+        }
+        catch (RegistryDomainException ex)
+        {
+            _logger.LogError(
+                ex,
+                "[{CorrelationId}] Failed to delete '{ValueName}' from {Path}: {ErrorCode} - {Message}",
+                context.CorrelationId, valueName, path, ex.ErrorCode, ex.Message);
+
+            _metrics.IncrementCounter(
+                "registry_operations_total",
+                new Dictionary<string, string> { ["operation"] = "delete_value", ["status"] = "error" });
+
+            return $"❌ Error: {ex.Message}";
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(
+                ex,
+                "[{CorrelationId}] Unexpected error deleting '{ValueName}' from {Path}",
+                context.CorrelationId, valueName, path);
+
+            _metrics.IncrementCounter(
+                "registry_operations_total",
+                new Dictionary<string, string> { ["operation"] = "delete_value", ["status"] = "error" });
+
+            return $"❌ Unexpected error: {ex.Message}";
         }
     }
 
