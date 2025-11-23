@@ -274,11 +274,36 @@ public sealed class RegistryTools
         [Description("Full registry path (e.g., 'HKEY_CURRENT_USER\\Software\\MyApp')")] string path,
         CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(path))
-            throw new ArgumentException("Registry path cannot be null or empty", nameof(path));
+        _logger.LogCritical(
+            "MCP Tool 'enumerate_values' called: Path={Path}",
+            path);
 
-        var context = CreateRequestContext(cancellationToken);
-        return await _handlers.HandleEnumerateValuesAsync(path, context);
+        try
+        {
+            if (string.IsNullOrWhiteSpace(path))
+                throw new ArgumentException("Registry path cannot be null or empty", nameof(path));
+
+            var context = CreateRequestContext(cancellationToken);
+            Console.Error.WriteLine($"[REGISTRY_TOOLS] Created context: CorrelationId={context.CorrelationId}");
+            
+            var result = await _handlers.HandleEnumerateValuesAsync(path, context);
+
+            Console.Error.WriteLine($"[REGISTRY_TOOLS] Handler returned {result.Count} values");
+            _logger.LogCritical(
+                "MCP Tool 'enumerate_values' completed successfully: Path={Path}, ValuesCount={Count}",
+                path, result.Count);
+
+            return result;
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[REGISTRY_TOOLS] Exception in EnumerateValuesAsync: {ex.GetType().Name}: {ex.Message}");
+            _logger.LogError(
+                ex,
+                "MCP Tool 'enumerate_values' failed: Path={Path}, Error={Error}",
+                path, ex.Message);
+            throw;
+        }
     }
 
     [McpServerTool(Name = "get_key_info")]

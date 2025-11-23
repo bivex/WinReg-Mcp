@@ -10,5 +10,7 @@ public sealed class RegistryKeyInfoResponse
     public int SubKeyCount { get; init; }
     public int ValueCount { get; init; }
     public List<string> SubKeyNames { get; init; } = new();
+    public bool Exists { get; init; } = true;
+    public string? ErrorMessage { get; init; }
 }
 

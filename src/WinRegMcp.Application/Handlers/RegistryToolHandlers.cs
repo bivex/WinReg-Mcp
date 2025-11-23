@@ -130,14 +130,58 @@ public sealed class RegistryToolHandlers
                 "registry_operations_total",
                 new Dictionary<string, string> { ["operation"] = "write_value", ["status"] = "success" });
 
-            return $"Successfully wrote value '{request.ValueName}' to {path}";
+            return $"✅ Successfully wrote value '{request.ValueName}' to {path.GetNormalizedPath()}";
         }
-        catch (RegistryDomainException)
+        catch (RegistryKeyNotFoundException)
         {
+            _logger.LogWarning(
+                "[{CorrelationId}] Registry key not found when writing '{ValueName}' to {Path}",
+                context.CorrelationId, request.ValueName, request.Path);
+
             _metrics.IncrementCounter(
                 "registry_operations_total",
                 new Dictionary<string, string> { ["operation"] = "write_value", ["status"] = "error" });
-            throw;
+
+            return $"❌ Registry key not found: {request.Path}. Create the key first.";
+        }
+        catch (RegistryAccessDeniedException ex)
+        {
+            _logger.LogError(
+                ex,
+                "[{CorrelationId}] Access denied when writing '{ValueName}' to {Path}",
+                context.CorrelationId, request.ValueName, request.Path);
+
+            _metrics.IncrementCounter(
+                "registry_operations_total",
+                new Dictionary<string, string> { ["operation"] = "write_value", ["status"] = "error" });
+
+            return $"❌ Access denied: {ex.Reason}";
+        }
+        catch (RegistryDomainException ex)
+        {
+            _logger.LogError(
+                ex,
+                "[{CorrelationId}] Failed to write '{ValueName}' to {Path}: {ErrorCode} - {Message}",
+                context.CorrelationId, request.ValueName, request.Path, ex.ErrorCode, ex.Message);
+
+            _metrics.IncrementCounter(
+                "registry_operations_total",
+                new Dictionary<string, string> { ["operation"] = "write_value", ["status"] = "error" });
+            
+            return $"❌ Error: {ex.Message}";
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(
+                ex,
+                "[{CorrelationId}] Unexpected error writing '{ValueName}' to {Path}",
+                context.CorrelationId, request.ValueName, request.Path);
+
+            _metrics.IncrementCounter(
+                "registry_operations_total",
+                new Dictionary<string, string> { ["operation"] = "write_value", ["status"] = "error" });
+            
+            return $"❌ Unexpected error: {ex.Message}";
         }
     }
 
@@ -277,6 +321,33 @@ public sealed class RegistryToolHandlers
 
             return result;
         }
+        catch (RegistryKeyNotFoundException)
+        {
+            // Key not found - return informative message
+            _logger.LogInformation(
+                "[{CorrelationId}] Registry key not found: {Path}",
+                context.CorrelationId, request.Path);
+
+            _metrics.IncrementCounter(
+                "registry_operations_total",
+                new Dictionary<string, string> { ["operation"] = "enumerate_keys", ["status"] = "not_found" });
+
+            // Return message indicating the key was not found
+            return new List<string> { $"ℹ️  Registry key not found: {request.Path}" };
+        }
+        catch (RegistryAccessDeniedException ex)
+        {
+            _logger.LogWarning(
+                "[{CorrelationId}] Access denied when enumerating keys in {Path}: {Reason}",
+                context.CorrelationId, request.Path, ex.Reason);
+
+            _metrics.IncrementCounter(
+                "registry_operations_total",
+                new Dictionary<string, string> { ["operation"] = "enumerate_keys", ["status"] = "error" });
+
+            // Return error message as a list item
+            return new List<string> { $"Error: Access denied - {ex.Reason}" };
+        }
         catch (RegistryDomainException ex)
         {
             _logger.LogError(
@@ -287,7 +358,9 @@ public sealed class RegistryToolHandlers
             _metrics.IncrementCounter(
                 "registry_operations_total",
                 new Dictionary<string, string> { ["operation"] = "enumerate_keys", ["status"] = "error" });
-            throw;
+            
+            // Return error message as a list item
+            return new List<string> { $"Error: {ex.Message}" };
         }
         catch (Exception ex)
         {
@@ -299,7 +372,9 @@ public sealed class RegistryToolHandlers
             _metrics.IncrementCounter(
                 "registry_operations_total",
                 new Dictionary<string, string> { ["operation"] = "enumerate_keys", ["status"] = "error" });
-            throw;
+            
+            // Return error message as a list item
+            return new List<string> { $"Error: {ex.Message}" };
         }
     }
 
@@ -329,12 +404,108 @@ public sealed class RegistryToolHandlers
                 SizeBytes = v.DataSizeBytes
             }).ToList();
         }
-        catch (RegistryDomainException)
+        catch (RegistryKeyNotFoundException)
         {
+            // Key not found - return informative response
+            _logger.LogInformation(
+                "[{CorrelationId}] Registry key not found: {Path}",
+                context.CorrelationId, path);
+
+            _metrics.IncrementCounter(
+                "registry_operations_total",
+                new Dictionary<string, string> { ["operation"] = "enumerate_values", ["status"] = "not_found" });
+
+            // Return response indicating the key was not found
+            return new List<RegistryValueResponse>
+            {
+                new RegistryValueResponse
+                {
+                    Name = "_info",
+                    Data = null,
+                    Type = "Info",
+                    Path = path,
+                    SizeBytes = 0,
+                    Exists = false,
+                    ErrorMessage = $"Registry key not found: {path}"
+                }
+            };
+        }
+        catch (RegistryAccessDeniedException ex)
+        {
+            _logger.LogWarning(
+                "[{CorrelationId}] Access denied when enumerating values in {Path}: {Reason}",
+                context.CorrelationId, path, ex.Reason);
+
             _metrics.IncrementCounter(
                 "registry_operations_total",
                 new Dictionary<string, string> { ["operation"] = "enumerate_values", ["status"] = "error" });
-            throw;
+
+            // Return error info in response
+            return new List<RegistryValueResponse>
+            {
+                new RegistryValueResponse
+                {
+                    Name = "_error",
+                    Data = null,
+                    Type = "Error",
+                    Path = path,
+                    SizeBytes = 0,
+                    Exists = false,
+                    ErrorMessage = $"Access denied: {ex.Reason}"
+                }
+            };
+        }
+        catch (RegistryDomainException ex)
+        {
+            _logger.LogError(
+                ex,
+                "[{CorrelationId}] Failed to enumerate values in {Path}: {ErrorCode} - {Message}",
+                context.CorrelationId, path, ex.ErrorCode, ex.Message);
+
+            _metrics.IncrementCounter(
+                "registry_operations_total",
+                new Dictionary<string, string> { ["operation"] = "enumerate_values", ["status"] = "error" });
+
+            // Return error info in response
+            return new List<RegistryValueResponse>
+            {
+                new RegistryValueResponse
+                {
+                    Name = "_error",
+                    Data = null,
+                    Type = "Error",
+                    Path = path,
+                    SizeBytes = 0,
+                    Exists = false,
+                    ErrorMessage = $"Error: {ex.Message}"
+                }
+            };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(
+                ex,
+                "[{CorrelationId}] Unexpected error enumerating values in {Path}",
+                context.CorrelationId, path);
+
+            _metrics.IncrementCounter(
+                "registry_operations_total",
+                new Dictionary<string, string> { ["operation"] = "enumerate_values", ["status"] = "error" });
+
+            // Return error info in response
+            return new List<RegistryValueResponse>
+            {
+                new RegistryValueResponse
+                {
+                    Name = "_error",
+                    Data = null,
+                    Type = "Error",
+                    Path = path,
+                    SizeBytes = 0,
+                    Exists = false,
+                    ErrorMessage = $"Unexpected error: {ex.Message}"
+                }
+            };
         }
     }
 
@@ -364,12 +535,92 @@ public sealed class RegistryToolHandlers
                 SubKeyNames = keyInfo.SubKeyNames.ToList()
             };
         }
-        catch (RegistryDomainException)
+        catch (RegistryKeyNotFoundException)
         {
+            // Key not found - return response with error info
+            _logger.LogInformation(
+                "[{CorrelationId}] Registry key not found: {Path}",
+                context.CorrelationId, path);
+
+            _metrics.IncrementCounter(
+                "registry_operations_total",
+                new Dictionary<string, string> { ["operation"] = "get_key_info", ["status"] = "success" });
+
+            return new RegistryKeyInfoResponse
+            {
+                Path = path,
+                Name = string.Empty,
+                SubKeyCount = 0,
+                ValueCount = 0,
+                SubKeyNames = new List<string>(),
+                Exists = false,
+                ErrorMessage = $"Registry key not found: {path}"
+            };
+        }
+        catch (RegistryAccessDeniedException ex)
+        {
+            _logger.LogWarning(
+                "[{CorrelationId}] Access denied when getting key info for {Path}: {Reason}",
+                context.CorrelationId, path, ex.Reason);
+
             _metrics.IncrementCounter(
                 "registry_operations_total",
                 new Dictionary<string, string> { ["operation"] = "get_key_info", ["status"] = "error" });
-            throw;
+
+            return new RegistryKeyInfoResponse
+            {
+                Path = path,
+                Name = string.Empty,
+                SubKeyCount = 0,
+                ValueCount = 0,
+                SubKeyNames = new List<string>(),
+                Exists = false,
+                ErrorMessage = $"Access denied: {ex.Reason}"
+            };
+        }
+        catch (RegistryDomainException ex)
+        {
+            _logger.LogError(
+                ex,
+                "[{CorrelationId}] Failed to get key info for {Path}: {ErrorCode} - {Message}",
+                context.CorrelationId, path, ex.ErrorCode, ex.Message);
+
+            _metrics.IncrementCounter(
+                "registry_operations_total",
+                new Dictionary<string, string> { ["operation"] = "get_key_info", ["status"] = "error" });
+            
+            return new RegistryKeyInfoResponse
+            {
+                Path = path,
+                Name = string.Empty,
+                SubKeyCount = 0,
+                ValueCount = 0,
+                SubKeyNames = new List<string>(),
+                Exists = false,
+                ErrorMessage = $"Error: {ex.Message}"
+            };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(
+                ex,
+                "[{CorrelationId}] Unexpected error getting key info for {Path}",
+                context.CorrelationId, path);
+
+            _metrics.IncrementCounter(
+                "registry_operations_total",
+                new Dictionary<string, string> { ["operation"] = "get_key_info", ["status"] = "error" });
+            
+            return new RegistryKeyInfoResponse
+            {
+                Path = path,
+                Name = string.Empty,
+                SubKeyCount = 0,
+                ValueCount = 0,
+                SubKeyNames = new List<string>(),
+                Exists = false,
+                ErrorMessage = $"Unexpected error: {ex.Message}"
+            };
         }
     }
 
@@ -390,14 +641,59 @@ public sealed class RegistryToolHandlers
                 "registry_operations_total",
                 new Dictionary<string, string> { ["operation"] = "delete_key", ["status"] = "success" });
 
-            return $"Successfully deleted key: {path}";
+            return $"✅ Successfully deleted key: {path}";
         }
-        catch (RegistryDomainException)
+        catch (RegistryKeyNotFoundException)
         {
+            // Key not found - that's fine, already deleted
+            _logger.LogInformation(
+                "[{CorrelationId}] Registry key not found (already deleted): {Path}",
+                context.CorrelationId, path);
+
+            _metrics.IncrementCounter(
+                "registry_operations_total",
+                new Dictionary<string, string> { ["operation"] = "delete_key", ["status"] = "success" });
+
+            return $"ℹ️  Key was already removed or doesn't exist: {path}";
+        }
+        catch (RegistryAccessDeniedException ex)
+        {
+            _logger.LogError(
+                ex,
+                "[{CorrelationId}] Access denied when deleting key {Path}",
+                context.CorrelationId, path);
+
             _metrics.IncrementCounter(
                 "registry_operations_total",
                 new Dictionary<string, string> { ["operation"] = "delete_key", ["status"] = "error" });
-            throw;
+
+            return $"❌ Access denied: {ex.Reason}";
+        }
+        catch (RegistryDomainException ex)
+        {
+            _logger.LogError(
+                ex,
+                "[{CorrelationId}] Failed to delete key {Path}: {ErrorCode} - {Message}",
+                context.CorrelationId, path, ex.ErrorCode, ex.Message);
+
+            _metrics.IncrementCounter(
+                "registry_operations_total",
+                new Dictionary<string, string> { ["operation"] = "delete_key", ["status"] = "error" });
+            
+            return $"❌ Error: {ex.Message}";
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(
+                ex,
+                "[{CorrelationId}] Unexpected error deleting key {Path}",
+                context.CorrelationId, path);
+
+            _metrics.IncrementCounter(
+                "registry_operations_total",
+                new Dictionary<string, string> { ["operation"] = "delete_key", ["status"] = "error" });
+            
+            return $"❌ Unexpected error: {ex.Message}";
         }
     }
 
