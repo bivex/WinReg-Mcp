@@ -1,0 +1,26 @@
+{
+  "allowed_roots": [
+    {
+      "path": "HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion",
+      "access": "read",
+      "max_depth": 2
+    },
+    {
+      "path": "HKEY_CURRENT_USER\\Software",
+      "access": "read",
+      "max_depth": 3
+    },
+    {
+      "path": "HKEY_CURRENT_USER\\Software\\MyApp",
+      "access": "read_write",
+      "max_depth": 5
+    }
+  ],
+  "denied_paths": [
+    "HKEY_LOCAL_MACHINE\\SECURITY",
+    "HKEY_LOCAL_MACHINE\\SAM",
+    "HKEY_LOCAL_MACHINE\\SYSTEM\\CurrentControlSet\\Control\\Lsa",
+    "HKEY_LOCAL_MACHINE\\SYSTEM\\CurrentControlSet\\Services"
+  ]
+}
+

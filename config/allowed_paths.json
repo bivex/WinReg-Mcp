@@ -1,0 +1,25 @@
+{
+  "allowedRoots": [
+    {
+      "path": "HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion",
+      "access": "read",
+      "maxDepth": 2
+    },
+    {
+      "path": "HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion",
+      "access": "read",
+      "maxDepth": 2
+    },
+    {
+      "path": "HKEY_CURRENT_USER\\Software",
+      "access": "read",
+      "maxDepth": 3
+    }
+  ],
+  "deniedPaths": [
+    "HKEY_LOCAL_MACHINE\\SECURITY",
+    "HKEY_LOCAL_MACHINE\\SAM",
+    "HKEY_LOCAL_MACHINE\\SYSTEM\\CurrentControlSet\\Control\\Lsa"
+  ]
+}
+
