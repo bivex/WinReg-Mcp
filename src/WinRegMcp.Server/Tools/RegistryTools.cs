@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging;
 using ModelContextProtocol.Server;
 using WinRegMcp.Application.DTOs;
 using WinRegMcp.Application.Handlers;
+using WinRegMcp.Domain.Exceptions;
 using WinRegMcp.Domain.Models;
 using WinRegMcp.Infrastructure.Configuration;
 using WinRegMcp.Infrastructure.Observability;
@@ -112,6 +113,44 @@ public sealed class RegistryTools
                 result.Path, result.Name, result.Type);
 
             return result;
+        }
+        catch (RegistryValueNotFoundException ex)
+        {
+            // Value not found - return a response indicating this instead of throwing
+            Console.Error.WriteLine($"[REGISTRY_TOOLS] Value not found: {ex.ValueName} in {path}");
+            _logger.LogInformation(
+                "Registry value '{ValueName}' not found in {Path}",
+                value_name, path);
+
+            return new RegistryValueResponse
+            {
+                Name = value_name!,
+                Data = null,
+                Type = "NotFound",
+                Path = path!,
+                SizeBytes = 0,
+                Exists = false,
+                ErrorMessage = $"Registry value '{value_name}' not found in key: {path}"
+            };
+        }
+        catch (RegistryKeyNotFoundException)
+        {
+            // Key not found - return a response indicating this
+            Console.Error.WriteLine($"[REGISTRY_TOOLS] Registry key not found: {path}");
+            _logger.LogInformation(
+                "Registry key not found: {Path}",
+                path);
+
+            return new RegistryValueResponse
+            {
+                Name = value_name!,
+                Data = null,
+                Type = "KeyNotFound",
+                Path = path!,
+                SizeBytes = 0,
+                Exists = false,
+                ErrorMessage = $"Registry key not found: {path}"
+            };
         }
         catch (Exception ex)
         {
