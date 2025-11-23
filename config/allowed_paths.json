@@ -3,23 +3,55 @@
     {
       "path": "HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion",
       "access": "read",
-      "maxDepth": 2
+      "maxDepth": 3
     },
     {
       "path": "HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion",
       "access": "read",
-      "maxDepth": 2
+      "maxDepth": 3
     },
     {
       "path": "HKEY_CURRENT_USER\\Software",
       "access": "admin",
       "maxDepth": 3
+    },
+    {
+      "path": "HKEY_LOCAL_MACHINE\\SOFTWARE\\Classes",
+      "access": "read",
+      "maxDepth": 4
+    },
+    {
+      "path": "HKEY_LOCAL_MACHINE\\SOFTWARE\\WOW6432Node",
+      "access": "read",
+      "maxDepth": 3
+    },
+    {
+      "path": "HKEY_LOCAL_MACHINE\\SYSTEM\\CurrentControlSet\\Control\\Print\\Monitors",
+      "access": "read",
+      "maxDepth": 2
+    },
+    {
+      "path": "HKEY_LOCAL_MACHINE\\SYSTEM\\CurrentControlSet\\Control\\Session Manager",
+      "access": "read",
+      "maxDepth": 2
+    },
+    {
+      "path": "HKEY_LOCAL_MACHINE\\SYSTEM\\CurrentControlSet\\Services",
+      "access": "read",
+      "maxDepth": 2
+    },
+    {
+      "path": "HKEY_CURRENT_USER\\SOFTWARE\\Classes",
+      "access": "read",
+      "maxDepth": 4
     }
   ],
   "deniedPaths": [
     "HKEY_LOCAL_MACHINE\\SECURITY",
     "HKEY_LOCAL_MACHINE\\SAM",
-    "HKEY_LOCAL_MACHINE\\SYSTEM\\CurrentControlSet\\Control\\Lsa"
+    "HKEY_LOCAL_MACHINE\\SYSTEM\\CurrentControlSet\\Control\\Lsa",
+    "HKEY_LOCAL_MACHINE\\SYSTEM\\CurrentControlSet\\Control\\SecurityProviders",
+    "HKEY_LOCAL_MACHINE\\SYSTEM\\CurrentControlSet\\Services\\WinSock2\\Parameters\\Protocol_Catalog9"
   ]
 }
 

@@ -332,6 +332,46 @@ public sealed class RegistryTools
         return await _handlers.HandleDeleteKeyAsync(path, context);
     }
 
+    [McpServerTool(Name = "search_clsid")]
+    [Description("Search for COM CLSID objects with InprocServer32 DLLs (useful for finding loaded DLLs)")]
+    public async Task<List<ClsidSearchResult>> SearchClsidAsync(
+        [Description("Optional: Filter by DLL name (e.g., 'shell32.dll'). Leave empty to get all.")] string dll_filter,
+        [Description("Maximum number of results to return (default: 50, max: 200)")] int max_results,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(dll_filter))
+            dll_filter = string.Empty;
+        
+        var limit = Math.Min(max_results > 0 ? max_results : 50, 200);
+        var context = CreateRequestContext(cancellationToken);
+        
+        _logger.LogInformation(
+            "MCP Tool 'search_clsid' called: DllFilter={DllFilter}, MaxResults={MaxResults}",
+            string.IsNullOrEmpty(dll_filter) ? "none" : dll_filter, limit);
+
+        try
+        {
+            var results = await _handlers.HandleSearchClsidAsync(
+                string.IsNullOrEmpty(dll_filter) ? null : dll_filter, 
+                limit, 
+                context);
+
+            _logger.LogInformation(
+                "MCP Tool 'search_clsid' completed: Found {Count} results",
+                results.Count);
+
+            return results;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(
+                ex,
+                "MCP Tool 'search_clsid' failed: {Error}",
+                ex.Message);
+            throw;
+        }
+    }
+
     private RequestContext CreateRequestContext(CancellationToken cancellationToken)
     {
         return new RequestContext(
@@ -340,4 +380,5 @@ public sealed class RegistryTools
             cancellationToken);
     }
 }
+
 

@@ -723,5 +723,98 @@ public sealed class RegistryToolHandlers
             _ => dataStr
         };
     }
+
+    public async Task<List<ClsidSearchResult>> HandleSearchClsidAsync(
+        string? dllFilter,
+        int maxResults,
+        RequestContext context)
+    {
+        _logger.LogInformation(
+            "[{CorrelationId}] Searching CLSID objects: Filter={Filter}, MaxResults={MaxResults}",
+            context.CorrelationId, dllFilter ?? "none", maxResults);
+
+        var results = new List<ClsidSearchResult>();
+
+        try
+        {
+            // Work directly with Win32 Registry API to avoid enumeration limits
+            await Task.Run(() =>
+            {
+                using var clsidKey = Microsoft.Win32.Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Classes\CLSID", false);
+                if (clsidKey == null)
+                {
+                    _logger.LogWarning(
+                        "[{CorrelationId}] CLSID registry key not found",
+                        context.CorrelationId);
+                    return;
+                }
+
+                var clsidNames = clsidKey.GetSubKeyNames();
+                _logger.LogInformation(
+                    "[{CorrelationId}] Found {Count} total CLSID entries, searching for matches",
+                    context.CorrelationId, clsidNames.Length);
+
+                foreach (var clsidGuid in clsidNames)
+                {
+                    if (results.Count >= maxResults)
+                        break;
+
+                    if (context.CancellationToken.IsCancellationRequested)
+                        break;
+
+                    try
+                    {
+                        // Open InprocServer32 subkey directly
+                        using var inprocKey = clsidKey.OpenSubKey($@"{clsidGuid}\InprocServer32", false);
+                        if (inprocKey == null)
+                            continue;
+
+                        // Read default value (DLL path)
+                        var dllPath = inprocKey.GetValue("") as string;
+                        if (string.IsNullOrWhiteSpace(dllPath))
+                            continue;
+
+                        // Apply filter if provided
+                        if (!string.IsNullOrEmpty(dllFilter) && 
+                            !dllPath.Contains(dllFilter, StringComparison.OrdinalIgnoreCase))
+                            continue;
+
+                        results.Add(new ClsidSearchResult
+                        {
+                            Clsid = clsidGuid,
+                            DllPath = dllPath,
+                            RegistryPath = $@"HKEY_LOCAL_MACHINE\SOFTWARE\Classes\CLSID\{clsidGuid}\InprocServer32"
+                        });
+
+                        _logger.LogDebug(
+                            "[{CorrelationId}] Found matching CLSID: {Clsid} -> {DllPath}",
+                            context.CorrelationId, clsidGuid, dllPath);
+                    }
+                    catch (Exception ex)
+                    {
+                        // Skip CLSIDs that can't be read (access denied, etc.)
+                        _logger.LogTrace(
+                            "[{CorrelationId}] Skipping CLSID {Clsid}: {Error}",
+                            context.CorrelationId, clsidGuid, ex.Message);
+                        continue;
+                    }
+                }
+            }, context.CancellationToken);
+
+            _logger.LogInformation(
+                "[{CorrelationId}] Found {Count} CLSID objects matching criteria",
+                context.CorrelationId, results.Count);
+
+            return results;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(
+                ex,
+                "[{CorrelationId}] Failed to search CLSID objects: {Error}",
+                context.CorrelationId, ex.Message);
+            throw;
+        }
+    }
 }
 
